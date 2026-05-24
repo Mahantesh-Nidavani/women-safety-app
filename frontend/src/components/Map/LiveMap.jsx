@@ -45,7 +45,7 @@ const LiveMap = ({ onLocationUpdate }) => {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, []);
+  }, [onLocationUpdate]);
 
   if (loading) {
     return (
