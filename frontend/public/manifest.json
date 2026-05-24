@@ -1,0 +1,17 @@
+{
+  "short_name": "SOS",
+  "name": "Women Safety SOS App",
+  "icons": [
+    {
+      "src": "favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ],
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "theme_color": "#ef4444",
+  "background_color": "#ffffff",
+  "description": "Women Safety SOS App - Stay Safe, Stay Protected",
+  "orientation": "portrait"
+}
