@@ -32,44 +32,47 @@ const triggerSOS = async (req, res) => {
     const locationLink = `https://www.google.com/maps?q=${lat},${lng}`;
     const contactsNotified = [];
 
-    for (const contact of user.trustedContacts) {
-      // Send SMS via Twilio
-      try {
-        await twilioClient.messages.create({
-          body: `🚨 EMERGENCY ALERT! ${user.name} needs help! Live Location: ${locationLink}`,
-          from: process.env.TWILIO_PHONE,
-          to: contact.phone
-        });
-      } catch (smsError) {
-        console.log(`SMS failed for ${contact.name}: ${smsError.message}`);
-      }
-
-      // Send Email
-      if (contact.email) {
-        try {
-          await transporter.sendMail({
-            from: process.env.EMAIL_USER,
-            to: contact.email,
-            subject: `🚨 EMERGENCY ALERT - ${user.name} needs help!`,
-            html: `
-              <h2 style="color:red;">🚨 EMERGENCY ALERT!</h2>
-              <p><strong>${user.name}</strong> needs immediate help!</p>
-              <p><strong>📍 Live Location:</strong> 
-                <a href="${locationLink}">Click here to view location</a>
-              </p>
-              <p><strong>📞 Contact:</strong> ${user.phone}</p>
-              <p style="color:red;">
-                <strong>Please respond immediately!</strong>
-              </p>
-            `
-          });
-        } catch (emailError) {
-          console.log(`Email failed for ${contact.name}: ${emailError.message}`);
-        }
-      }
-
-      contactsNotified.push(contact.name);
+    // Send SMS & Email to ALL trusted contacts
+  for (const contact of user.trustedContacts) {
+    // Send SMS via Twilio
+    try {
+      await twilioClient.messages.create({
+        body: `🚨 EMERGENCY ALERT! ${user.name} needs help! Live Location: ${locationLink}`,
+        from: process.env.TWILIO_PHONE,
+        to: contact.phone
+      });
+      console.log(`✅ SMS sent to ${contact.name}: ${contact.phone}`);
+    } catch (smsError) {
+      console.log(`❌ SMS failed for ${contact.name}: ${smsError.message}`);
     }
+
+    // Send Email to ALL contacts
+    if (contact.email) {
+      try {
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: contact.email,
+          subject: `🚨 EMERGENCY ALERT - ${user.name} needs help!`,
+          html: `
+            <h2 style="color:red;">🚨 EMERGENCY ALERT!</h2>
+            <p><strong>${user.name}</strong> needs immediate help!</p>
+            <p><strong>📍 Live Location:</strong> 
+              <a href="${locationLink}">Click here to view location</a>
+            </p>
+            <p><strong>📞 Contact:</strong> ${user.phone}</p>
+            <p style="color:red;">
+              <strong>Please respond immediately!</strong>
+            </p>
+          `
+        });
+        console.log(`✅ Email sent to ${contact.name}: ${contact.email}`);
+      } catch (emailError) {
+        console.log(`❌ Email failed for ${contact.name}: ${emailError.message}`);
+      }
+    }
+
+    contactsNotified.push(contact.name);
+  }
 
     // Save SOS Alert to database
     const alert = await SOSAlert.create({

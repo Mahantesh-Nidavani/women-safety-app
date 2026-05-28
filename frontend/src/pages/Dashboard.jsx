@@ -69,9 +69,12 @@ const handleSOS = async () => {
     toast.error('Please add trusted contacts first!');
     return;
   }
+
   setSosLoading(true);
+
+  // Get location first
   const getLocation = () => {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       if (currentLocation) {
         resolve(currentLocation);
       } else {
@@ -82,33 +85,38 @@ const handleSOS = async () => {
               lng: position.coords.longitude
             });
           },
-          (error) => {
+          () => {
             resolve({ lat: 0, lng: 0 });
           }
         );
       }
     });
   };
+
   const location = await getLocation();
   const locationLink = `https://www.google.com/maps?q=${location.lat},${location.lng}`;
   const message = `🚨 EMERGENCY ALERT! I need immediate help! My Live Location: ${locationLink}`;
-  // ✅ Layer 1 — Online SOS
+
+  // ✅ Layer 1 — Online SOS (sends to ALL contacts via backend)
   try {
     await triggerSOS({ lat: location.lat, lng: location.lng });
-    toast.success('🚨 Online SOS Alert sent successfully!');
+    toast.success('🚨 Online SOS Alert sent to ALL contacts!');
     fetchHistory();
   } catch (error) {
     toast.warn('⚠️ No internet! Trying offline SMS...');
+
+    // ✅ Layer 2 — Offline SMS to ALL contacts
+    for (const contact of contacts) {
+      try {
+        const smsLink = `sms:${contact.phone}?body=${encodeURIComponent(message)}`;
+        window.open(smsLink);
+      } catch (smsError) {
+        console.log(`SMS failed for ${contact.name}`);
+      }
+    }
+    toast.success('📱 Offline SMS triggered for all contacts!');
   }
-  // ✅ Layer 2 — Offline SMS
-  try {
-    const firstContact = contacts[0];
-    const smsLink = `sms:${firstContact.phone}?body=${encodeURIComponent(message)}`;
-    window.location.href = smsLink;
-    toast.success('📱 Offline SMS triggered!');
-  } catch (error) {
-    console.log('SMS failed:', error);
-  }
+
   setSosLoading(false);
 };
 
