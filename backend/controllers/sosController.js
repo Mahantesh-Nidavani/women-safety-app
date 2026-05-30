@@ -1,13 +1,7 @@
 const User = require('../models/User');
 const SOSAlert = require('../models/SOSAlert');
-const twilio = require('twilio');
 const nodemailer = require('nodemailer');
-
-// Setup Twilio
-const twilioClient = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+const axios = require('axios');
 
 // Setup Nodemailer
 const transporter = nodemailer.createTransport({
@@ -17,6 +11,83 @@ const transporter = nodemailer.createTransport({
     pass: process.env.EMAIL_PASS
   }
 });
+
+// Send SMS via Fast2SMS
+const sendFast2SMS = async (phone, message) => {
+  try {
+    // Clean phone number — keep only 10 digits
+    let phoneNumber = phone
+      .replace(/^\+91/, '')
+      .replace(/^91/, '')
+      .replace(/\s/g, '')
+      .trim();
+
+    if (phoneNumber.length !== 10) {
+      console.log(`❌ Invalid phone number: ${phone}`);
+      return false;
+    }
+
+    console.log(`📱 Sending SMS to: ${phoneNumber}`);
+
+    const response = await axios({
+      method: 'get',
+      url: 'https://www.fast2sms.com/dev/bulkV2',
+      params: {
+        authorization: process.env.FAST2SMS_API_KEY,
+        message: message,
+        language: 'english',
+        route: 'q',
+        numbers: phoneNumber
+      }
+    });
+
+    console.log(`✅ Fast2SMS response:`, response.data);
+    return true;
+  } catch (error) {
+    console.log(`❌ Fast2SMS failed:`, JSON.stringify(error.response?.data));
+    console.log(`❌ Status:`, error.response?.status);
+    console.log(`❌ Message:`, error.message);
+    return false;
+  }
+};
+// Send Email
+const sendEmail = async (contact, user, locationLink) => {
+  try {
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: contact.email,
+      subject: `🚨 EMERGENCY ALERT - ${user.name} needs help!`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #ef4444; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0;">🚨 EMERGENCY ALERT!</h1>
+          </div>
+          <div style="padding: 20px; background-color: #fff3f3;">
+            <h2 style="color: #ef4444;">${user.name} needs immediate help!</h2>
+            <p style="font-size: 16px;">Your trusted contact has triggered an SOS alert.</p>
+            <div style="background-color: white; padding: 15px; border-radius: 8px; margin: 15px 0;">
+              <p><strong>📍 Live Location:</strong></p>
+              <a href="${locationLink}"
+                 style="background-color: #ef4444; color: white; padding: 10px 20px;
+                        text-decoration: none; border-radius: 5px; display: inline-block;">
+                View Live Location on Maps
+              </a>
+            </div>
+            <p><strong>📞 Contact Number:</strong> ${user.phone}</p>
+            <p style="color: #ef4444; font-weight: bold; font-size: 18px;">
+              Please respond immediately!
+            </p>
+          </div>
+        </div>
+      `
+    });
+    console.log(`✅ Email sent to ${contact.name}: ${contact.email}`);
+    return true;
+  } catch (error) {
+    console.log(`❌ Email failed for ${contact.name}: ${error.message}`);
+    return false;
+  }
+};
 
 // @route POST /api/sos/trigger
 const triggerSOS = async (req, res) => {
@@ -30,49 +101,23 @@ const triggerSOS = async (req, res) => {
     }
 
     const locationLink = `https://www.google.com/maps?q=${lat},${lng}`;
+    const smsMessage = `EMERGENCY ALERT! ${user.name} needs immediate help! Live Location: ${locationLink} Please respond immediately!`;
     const contactsNotified = [];
 
-    // Send SMS & Email to ALL trusted contacts
-  for (const contact of user.trustedContacts) {
-    // Send SMS via Twilio
-    try {
-      await twilioClient.messages.create({
-        body: `🚨 EMERGENCY ALERT! ${user.name} needs help! Live Location: ${locationLink}`,
-        from: process.env.TWILIO_PHONE,
-        to: contact.phone
-      });
-      console.log(`✅ SMS sent to ${contact.name}: ${contact.phone}`);
-    } catch (smsError) {
-      console.log(`❌ SMS failed for ${contact.name}: ${smsError.message}`);
-    }
-
-    // Send Email to ALL contacts
-    if (contact.email) {
-      try {
-        await transporter.sendMail({
-          from: process.env.EMAIL_USER,
-          to: contact.email,
-          subject: `🚨 EMERGENCY ALERT - ${user.name} needs help!`,
-          html: `
-            <h2 style="color:red;">🚨 EMERGENCY ALERT!</h2>
-            <p><strong>${user.name}</strong> needs immediate help!</p>
-            <p><strong>📍 Live Location:</strong> 
-              <a href="${locationLink}">Click here to view location</a>
-            </p>
-            <p><strong>📞 Contact:</strong> ${user.phone}</p>
-            <p style="color:red;">
-              <strong>Please respond immediately!</strong>
-            </p>
-          `
-        });
-        console.log(`✅ Email sent to ${contact.name}: ${contact.email}`);
-      } catch (emailError) {
-        console.log(`❌ Email failed for ${contact.name}: ${emailError.message}`);
+    // Send to ALL contacts
+    for (const contact of user.trustedContacts) {
+      // ✅ Send SMS via Fast2SMS
+      if (contact.phone) {
+        await sendFast2SMS(contact.phone, smsMessage);
       }
-    }
 
-    contactsNotified.push(contact.name);
-  }
+      // ✅ Send Email
+      if (contact.email) {
+        await sendEmail(contact, user, locationLink);
+      }
+
+      contactsNotified.push(contact.name);
+    }
 
     // Save SOS Alert to database
     const alert = await SOSAlert.create({
@@ -83,7 +128,7 @@ const triggerSOS = async (req, res) => {
     });
 
     res.status(201).json({
-      message: '🚨 SOS Alert sent successfully!',
+      message: '🚨 SOS Alert sent successfully to all contacts!',
       contactsNotified,
       location: { lat, lng },
       alertId: alert._id
