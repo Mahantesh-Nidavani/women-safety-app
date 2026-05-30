@@ -44,9 +44,7 @@ const sendFast2SMS = async (phone, message) => {
     console.log(`✅ Fast2SMS response:`, response.data);
     return true;
   } catch (error) {
-    console.log(`❌ Fast2SMS failed:`, JSON.stringify(error.response?.data));
-    console.log(`❌ Status:`, error.response?.status);
-    console.log(`❌ Message:`, error.message);
+    console.log(`❌ Fast2SMS failed: ${error.response?.data || error.message}`);
     return false;
   }
 };
