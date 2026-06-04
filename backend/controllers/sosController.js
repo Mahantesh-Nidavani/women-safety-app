@@ -1,7 +1,6 @@
 const User = require('../models/User');
 const SOSAlert = require('../models/SOSAlert');
 const nodemailer = require('nodemailer');
-const axios = require('axios');
 
 // Setup Nodemailer
 const transporter = nodemailer.createTransport({
@@ -12,42 +11,6 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Send SMS via Fast2SMS
-const sendFast2SMS = async (phone, message) => {
-  try {
-    // Clean phone number — keep only 10 digits
-    let phoneNumber = phone
-      .replace(/^\+91/, '')
-      .replace(/^91/, '')
-      .replace(/\s/g, '')
-      .trim();
-
-    if (phoneNumber.length !== 10) {
-      console.log(`❌ Invalid phone number: ${phone}`);
-      return false;
-    }
-
-    console.log(`📱 Sending SMS to: ${phoneNumber}`);
-
-    const response = await axios({
-      method: 'get',
-      url: 'https://www.fast2sms.com/dev/bulkV2',
-      params: {
-        authorization: process.env.FAST2SMS_API_KEY,
-        message: message,
-        language: 'english',
-        route: 'q',
-        numbers: phoneNumber
-      }
-    });
-
-    console.log(`✅ Fast2SMS response:`, response.data);
-    return true;
-  } catch (error) {
-    console.log(`❌ Fast2SMS failed: ${error.response?.data || error.message}`);
-    return false;
-  }
-};
 // Send Email
 const sendEmail = async (contact, user, locationLink) => {
   try {
@@ -99,21 +62,13 @@ const triggerSOS = async (req, res) => {
     }
 
     const locationLink = `https://www.google.com/maps?q=${lat},${lng}`;
-    const smsMessage = `EMERGENCY ALERT! ${user.name} needs immediate help! Live Location: ${locationLink} Please respond immediately!`;
     const contactsNotified = [];
 
-    // Send to ALL contacts
+    // Send Email to ALL contacts
     for (const contact of user.trustedContacts) {
-      // ✅ Send SMS via Fast2SMS
-      if (contact.phone) {
-        await sendFast2SMS(contact.phone, smsMessage);
-      }
-
-      // ✅ Send Email
       if (contact.email) {
         await sendEmail(contact, user, locationLink);
       }
-
       contactsNotified.push(contact.name);
     }
 
