@@ -3,13 +3,25 @@ const SOSAlert = require('../models/SOSAlert');
 const nodemailer = require('nodemailer');
 
 // Setup Nodemailer
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+// Setup Nodemailer with connection pool
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      pool: true,
+      maxConnections: 5,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
+
+    // Verify connection on startup
+    transporter.verify((error) => {
+      if (error) {
+        console.log('❌ Email connection failed:', error);
+      } else {
+        console.log('✅ Email server ready!');
+      }
+    });
 
 // Send Email
 const sendEmail = async (contact, user, locationLink) => {
@@ -64,13 +76,16 @@ const triggerSOS = async (req, res) => {
     const locationLink = `https://www.google.com/maps?q=${lat},${lng}`;
     const contactsNotified = [];
 
-    // Send Email to ALL contacts
-    for (const contact of user.trustedContacts) {
+    // Send ALL emails simultaneously
+    const emailPromises = user.trustedContacts.map(async (contact) => {
       if (contact.email) {
         await sendEmail(contact, user, locationLink);
       }
-      contactsNotified.push(contact.name);
-    }
+      return contact.name;
+    });
+
+    const notified = await Promise.all(emailPromises);
+    notified.forEach(name => contactsNotified.push(name));
 
     // Save SOS Alert to database
     const alert = await SOSAlert.create({
